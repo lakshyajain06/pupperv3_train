@@ -566,7 +566,7 @@ class PupperV3Env(PipelineEnv):
         # Sample new command if more than 500 timesteps achieved
         state.info["command"] = jp.where(
             state.info["step"] > self._resample_velocity_step,
-            self.sample_command(cmd_rng),
+            self.sample_command_foot(cmd_rng),
             state.info["command"],
         )
 
