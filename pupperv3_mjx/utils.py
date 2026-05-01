@@ -236,13 +236,14 @@ def visualize_policy(
     # Make robot go forward, back, left, right
     command_seq = jp.array(
         [
-            [0.0, 0.0, 0.0],
-            [vx, 0.0, 0.0],
-            [-vx, 0.0, 0.0],
-            [0.0, vy, 0.0],
-            [0.0, -vy, 0.0],
-            [0.0, 0.0, wz],
-            [0.0, 0.0, -wz],
+            [0.15, 0.1, 0.075, 1.0],
+            [0.15, 0.2, 0.025, 1.0],
+            [0.05, 0.1, 0.025, 1.0],
+            [0.05, 0.2, 0.075, 1.0],
+            [0.15,-0.1, 0.075, 1.0],
+            [0.15,-0.2, 0.025, 1.0],
+            [0.05,-0.1, 0.025, 1.0],
+            [0.05,-0.2, 0.075, 1.0]
         ]
     )
 
@@ -253,7 +254,7 @@ def visualize_policy(
     rollout = [state.pipeline_state]
 
     # grab a trajectory
-    n_steps = 560
+    n_steps = 640
     render_every = 2
     ctrls = []
 

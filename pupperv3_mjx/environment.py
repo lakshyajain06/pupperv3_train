@@ -295,10 +295,10 @@ class PupperV3Env(PipelineEnv):
         foot_idx = jax.random.bernoulli(k_foot, p=0.5).astype(jp.float32)
 
         # define bounding box for target coordinates
-        foot_y_abs_range = (0.05, 0.30) # this is absolute because it is + or - depending on which foot
+        foot_y_abs_range = (0.05, 0.25) # this is absolute because it is + or - depending on which foot
 
-        foot_x_range = (0.05, 0.25)
-        foot_z_range = (-0.05, 0.15)
+        foot_x_range = (0.05, 0.2)
+        foot_z_range = (-0.05, 0.075)
 
         # sample y pos and flip based on foot
         abs_y = jax.random.uniform(k_y, (1,), minval=foot_y_abs_range[0], maxval=foot_y_abs_range[1])
