@@ -99,7 +99,7 @@ def reward_tracking_foot_lin_pos(
     # 4. Standard Gaussian reward
     return jp.exp(-jp.square(distance) / jp.square(tracking_sigma))
 
-def reward_stand(self, commands, pipeline_state):
+def reward_stand(commands, pipeline_state):
     # Use jp.int32 for JAX-compatible indexing
     selected_leg_idx = commands[3].astype(jp.int32) 
     
