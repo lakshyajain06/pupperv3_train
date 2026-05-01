@@ -238,7 +238,7 @@ class PupperV3Env(PipelineEnv):
         self._resample_velocity_step = resample_velocity_step
 
         # observation configuration
-        self.observation_dim = 36  # 33 without orientation, 36 with orientation
+        self.observation_dim = 37  # 33 without orientation, 36 with orientation
         self._observation_history = observation_history
 
         # reward configuration

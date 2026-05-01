@@ -57,23 +57,23 @@ def reward_action_rate(act: jax.Array, last_act: jax.Array) -> jax.Array:
     return jp.clip(jp.sum(jp.square(act - last_act)), -1000.0, 1000.0)
 
 
-def reward_tracking_lin_vel(
-    commands: jax.Array, x: Transform, xd: Motion, tracking_sigma
-) -> jax.Array:
-    # Tracking of linear velocity commands (xy axes)
-    local_vel = math.rotate(xd.vel[0], math.quat_inv(x.rot[0]))
-    lin_vel_error = jp.sum(jp.square(commands[:2] - local_vel[:2]))
-    lin_vel_reward = jp.exp(-lin_vel_error / (tracking_sigma + EPS))
-    return jp.clip(lin_vel_reward, -1000.0, 1000.0)
+# def reward_tracking_lin_vel(
+#     commands: jax.Array, x: Transform, xd: Motion, tracking_sigma
+# ) -> jax.Array:
+#     # Tracking of linear velocity commands (xy axes)
+#     local_vel = math.rotate(xd.vel[0], math.quat_inv(x.rot[0]))
+#     lin_vel_error = jp.sum(jp.square(commands[:2] - local_vel[:2]))
+#     lin_vel_reward = jp.exp(-lin_vel_error / (tracking_sigma + EPS))
+#     return jp.clip(lin_vel_reward, -1000.0, 1000.0)
 
 
-def reward_tracking_ang_vel(
-    commands: jax.Array, x: Transform, xd: Motion, tracking_sigma
-) -> jax.Array:
-    # Tracking of angular velocity commands (yaw)
-    base_ang_vel = math.rotate(xd.ang[0], math.quat_inv(x.rot[0]))
-    ang_vel_error = jp.square(commands[2] - base_ang_vel[2])
-    return jp.clip(jp.exp(-ang_vel_error / (tracking_sigma + EPS)), -1000.0, 1000.0)
+# def reward_tracking_ang_vel(
+#     commands: jax.Array, x: Transform, xd: Motion, tracking_sigma
+# ) -> jax.Array:
+#     # Tracking of angular velocity commands (yaw)
+#     base_ang_vel = math.rotate(xd.ang[0], math.quat_inv(x.rot[0]))
+#     ang_vel_error = jp.square(commands[2] - base_ang_vel[2])
+#     return jp.clip(jp.exp(-ang_vel_error / (tracking_sigma + EPS)), -1000.0, 1000.0)
 
 def reward_tracking_foot_lin_pos(
     commands: jax.Array,
@@ -123,16 +123,16 @@ def reward_stand(commands, contact):
     # 4. Sum them up into a single float
     return jp.sum(rewards)
 
-def reward_feet_air_time(
-    air_time: jax.Array,
-    first_contact: jax.Array,
-    commands: jax.Array,
-    minimum_airtime: float = 0.1,
-) -> jax.Array:
-    # Reward air time.
-    rew_air_time = jp.sum((air_time - minimum_airtime) * first_contact)
-    rew_air_time *= math.normalize(commands[:3])[1] > 0.05  # no reward for zero command
-    return jp.clip(rew_air_time, -1000.0, 1000.0)
+# def reward_feet_air_time(
+#     air_time: jax.Array,
+#     first_contact: jax.Array,
+#     commands: jax.Array,
+#     minimum_airtime: float = 0.1,
+# ) -> jax.Array:
+#     # Reward air time.
+#     rew_air_time = jp.sum((air_time - minimum_airtime) * first_contact)
+#     rew_air_time *= math.normalize(commands[:3])[1] > 0.05  # no reward for zero command
+#     return jp.clip(rew_air_time, -1000.0, 1000.0)
 
 
 def reward_abduction_angle(
@@ -142,29 +142,29 @@ def reward_abduction_angle(
     return jp.clip(jp.sum(jp.square(joint_angles[1::3] - desired_abduction_angles)), -1000.0, 1000.0)
 
 
-def reward_stand_still(
-    commands: jax.Array,
-    joint_angles: jax.Array,
-    default_pose: jax.Array,
-    command_threshold: float,
-) -> jax.Array:
-    """
-    Penalize motion at zero commands
-    Args:
-        commands: robot velocity commands
-        joint_angles: joint angles
-        default_pose: default pose
-        command_threshold: if norm of commands is less than this, return non-zero penalty
-    """
+# def reward_stand_still(
+#     commands: jax.Array,
+#     joint_angles: jax.Array,
+#     default_pose: jax.Array,
+#     command_threshold: float,
+# ) -> jax.Array:
+#     """
+#     Penalize motion at zero commands
+#     Args:
+#         commands: robot velocity commands
+#         joint_angles: joint angles
+#         default_pose: default pose
+#         command_threshold: if norm of commands is less than this, return non-zero penalty
+#     """
 
-    # Penalize motion at zero commands
-    return jp.clip(
-        jp.sum(jp.abs(joint_angles - default_pose)) * (
-            math.normalize(commands[:3])[1] < command_threshold
-        ),
-        -1000.0,
-        1000.0
-    )
+#     # Penalize motion at zero commands
+#     return jp.clip(
+#         jp.sum(jp.abs(joint_angles - default_pose)) * (
+#             math.normalize(commands[:3])[1] < command_threshold
+#         ),
+#         -1000.0,
+#         1000.0
+#     )
 
 
 def reward_foot_slip(
