@@ -116,8 +116,8 @@ def reward_stand(commands, contact):
     # If moving leg is in contact: -2.0. If stance leg is in contact: +0.5.
     rewards = jp.where(
         moving_mask, 
-        -2.0 * contact,   # Penalty for the manipulator leg
-        0.5 * contact     # Reward for the three stance legs
+        -1.0 * contact,   # Penalty for the manipulator leg
+        1.0 * contact     # Reward for the three stance legs
     )
     
     # 4. Sum them up into a single float
