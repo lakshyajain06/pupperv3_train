@@ -494,8 +494,7 @@ class PupperV3Env(PipelineEnv):
             ),
             "stand": rewards.reward_stand(
                 commands=state.info["command"],
-                feet_site_id=self._feet_site_id,
-                pipeline_state=pipeline_state
+                contact=contact
             )
             ,
             "tracking_orientation": rewards.reward_tracking_orientation(
