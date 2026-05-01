@@ -439,9 +439,9 @@ class PupperV3Env(PipelineEnv):
         target_world_pos = anchor_pos_world + math.rotate(target_local_xyz, torso_quat)
 
        
-        new_q = pipeline_state.q
-        new_q = new_q.at[-14:-11].set(target_world_pos)
-        pipeline_state = pipeline_state.replace(q=new_q)        
+        # new_q = pipeline_state.q
+        # new_q = new_q.at[-14:-11].set(target_world_pos)
+        # pipeline_state = pipeline_state.replace(q=new_q)        
 
 
         # Observation data
