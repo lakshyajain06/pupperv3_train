@@ -99,13 +99,13 @@ def reward_tracking_foot_lin_pos(
     # 4. Standard Gaussian reward
     return jp.exp(-jp.square(distance) / jp.square(tracking_sigma))
 
-def reward_stand(commands, pipeline_state):
+def reward_stand(commands, feet_site_id, pipeline_state):
     # Use jp.int32 for JAX-compatible indexing
     selected_leg_idx = commands[3].astype(jp.int32) 
     
     # 1. Get contact forces for all 4 feet at once
     # Result: a 4-element array of booleans
-    contact_forces = pipeline_state.contact.force[self._feet_site_id] 
+    contact_forces = pipeline_state.contact.force[feet_site_id] 
     is_contact = contact_forces > 0.1
     
     # 2. Create a "Moving Mask" (e.g., [0, 1, 0, 0] if leg 1 is selected)
