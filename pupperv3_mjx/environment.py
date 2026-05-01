@@ -166,7 +166,11 @@ class PupperV3Env(PipelineEnv):
             desired_world_z_in_body_frame (jax.Array): The desired world z in body frame.
             use_imu (bool): Whether to use IMU.
         """
+
+        
         sys = mjcf.load(path)
+        
+
         self._dt = environment_timestep  # this environment is 50 fps
         sys = sys.tree_replace({"opt.timestep": physics_timestep})
 
@@ -181,7 +185,7 @@ class PupperV3Env(PipelineEnv):
         )
 
         # override the default joint angles with default_pose
-        sys.mj_model.keyframe("home").qpos[7:] = default_pose
+        sys.mj_model.keyframe("home").qpos[7:19] = default_pose
 
         n_frames = self._dt // sys.opt.timestep
         super().__init__(sys, backend="mjx", n_frames=n_frames)
@@ -201,8 +205,8 @@ class PupperV3Env(PipelineEnv):
         self._init_q = jp.array(sys.mj_model.keyframe("home").qpos)
         self._default_pose = default_pose
         self._desired_abduction_angles = desired_abduction_angles
-        self.lowers = joint_lower_limits
-        self.uppers = joint_upper_limits
+        self.lowers = jp.array(joint_lower_limits)
+        self.uppers = jp.array(joint_upper_limits)
         feet_site = foot_site_names
         feet_site_id = [
             mujoco.mj_name2id(sys.mj_model, mujoco.mjtObj.mjOBJ_SITE.value, f) for f in feet_site
@@ -254,7 +258,7 @@ class PupperV3Env(PipelineEnv):
         # whether to use imu
         self._use_imu = use_imu
 
-    def sample_command(self, rng: jax.Array) -> jax.Array:
+    def sample_command_body(self, rng: jax.Array) -> jax.Array:
         """
         Sample random command with desired linear and angular velocity ranges.
         With a probability of self._zero_command_probability, return a near-zero
@@ -283,6 +287,29 @@ class PupperV3Env(PipelineEnv):
         )
 
         return new_cmd
+    
+    def sample_command_foot(self, rng: jax.Array):
+        rng, k_x, k_y, k_z, k_vec, k_foot = jax.random.split(rng, 6)
+
+        # get which foot
+        foot_idx = jax.random.bernoulli(k_foot, p=0.5).astype(jp.float32)
+
+        # define bounding box for target coordinates
+        foot_y_abs_range = (0.05, 0.30) # this is absolute because it is + or - depending on which foot
+
+        foot_x_range = (0.05, 0.25)
+        foot_z_range = (-0.05, 0.15)
+
+        # sample y pos and flip based on foot
+        abs_y = jax.random.uniform(k_y, (1,), minval=foot_y_abs_range[0], maxval=foot_y_abs_range[1])
+        y_sign = (foot_idx * 2.0) - 1.0
+        t_y = abs_y * y_sign
+
+        t_x = jax.random.uniform(k_x, (1,), minval=foot_x_range[0], maxval=foot_x_range[1])
+        t_z = jax.random.uniform(k_z, (1,), minval=foot_z_range[0], maxval=foot_z_range[1])
+
+        return jp.array([t_x[0], t_y[0], t_z[0], foot_idx])
+
 
     def sample_body_orientation(self, rng: jax.Array) -> jax.Array:
         """
@@ -347,7 +374,7 @@ class PupperV3Env(PipelineEnv):
             "action_buffer": self.initial_action_buffer(),
             "imu_buffer": self.initial_imu_buffer(),
             "last_vel": jp.zeros(12, dtype=float),
-            "command": self.sample_command(sample_command_key),
+            "command": self.sample_command_foot(sample_command_key),
             "last_contact": jp.zeros(4, dtype=bool),
             "feet_air_time": jp.zeros(4, dtype=float),
             "rewards": {k: 0.0 for k in self._reward_config.rewards.scales.keys()},
@@ -395,6 +422,28 @@ class PupperV3Env(PipelineEnv):
         pipeline_state = self.pipeline_step(state.pipeline_state, motor_targets)
         x, xd = pipeline_state.x, pipeline_state.xd
 
+        # grabbing foot command to render in world
+        cmd = state.info["command"]
+        target_local_xyz = cmd[:3]
+        leg_idx = cmd[3].astype(jp.int32)
+        anchor_idx = 1 - leg_idx
+
+        feet_site_ids = jp.array(self._feet_site_id)
+        actual_site_id = feet_site_ids[anchor_idx]
+
+        # body rotation to define direction of box/point
+        torso_quat = pipeline_state.x.rot[0]
+        anchor_pos_world = pipeline_state.site_xpos[actual_site_id]
+
+        # calculate world position of target
+        target_world_pos = anchor_pos_world + math.rotate(target_local_xyz, torso_quat)
+
+       
+        new_q = pipeline_state.q
+        new_q = new_q.at[-14:-11].set(target_world_pos)
+        pipeline_state = pipeline_state.replace(q=new_q)        
+
+
         # Observation data
         obs = self._get_obs(pipeline_state, state.info, state.obs)
         joint_angles = pipeline_state.q[7:]
@@ -402,6 +451,10 @@ class PupperV3Env(PipelineEnv):
 
         # Foot contact data based on z-position
         foot_pos = pipeline_state.site_xpos[self._feet_site_id]  # pytype: disable=attribute-error
+        # all_feet_vel = pipeline_state.site_xvelp[self._feet_site_id]
+        left_foot_pos = foot_pos[1]
+        right_foot_pos = foot_pos[0]
+
         foot_contact_z = foot_pos[:, 2] - self._foot_radius
         contact = foot_contact_z < 1e-3  # a mm or less off the floor
         contact_filt_mm = contact | state.info["last_contact"]
@@ -420,18 +473,30 @@ class PupperV3Env(PipelineEnv):
 
         # Reward
         rewards_dict = {
-            "tracking_lin_vel": rewards.reward_tracking_lin_vel(
+            # "tracking_lin_vel": rewards.reward_tracking_lin_vel(
+            #     state.info["command"],
+            #     x,
+            #     xd,
+            #     tracking_sigma=self._reward_config.rewards.tracking_sigma,
+            # ),
+            # "tracking_ang_vel": rewards.reward_tracking_ang_vel(
+            #     state.info["command"],
+            #     x,
+            #     xd,
+            #     tracking_sigma=self._reward_config.rewards.tracking_sigma,
+            # ),
+            "tracking_foot_lin_pos": rewards.reward_tracking_foot_lin_pos(
                 state.info["command"],
-                x,
-                xd,
+                target_world_pos,
+                left_foot_pos,
+                right_foot_pos,
                 tracking_sigma=self._reward_config.rewards.tracking_sigma,
             ),
-            "tracking_ang_vel": rewards.reward_tracking_ang_vel(
+            "stand": rewards.reward_stand(
                 state.info["command"],
-                x,
-                xd,
-                tracking_sigma=self._reward_config.rewards.tracking_sigma,
-            ),
+                pipeline_state
+            )
+            ,
             "tracking_orientation": rewards.reward_tracking_orientation(
                 state.info["desired_world_z_in_body_frame"],
                 x,
@@ -450,21 +515,21 @@ class PupperV3Env(PipelineEnv):
                 pipeline_state.qfrc_actuator[6:], pipeline_state.qvel[6:]
             ),
             "action_rate": rewards.reward_action_rate(action, state.info["last_act"]),
-            "stand_still": rewards.reward_stand_still(
-                state.info["command"], joint_angles, self._default_pose, 0.1
-            ),
-            "stand_still_joint_velocity": rewards.reward_stand_still(
-                state.info["command"], joint_vel, jp.zeros(12), self._stand_still_command_threshold
-            ),
+            # "stand_still": rewards.reward_stand_still(
+            #     state.info["command"], joint_angles, self._default_pose, 0.1
+            # ),
+            # "stand_still_joint_velocity": rewards.reward_stand_still(
+            #     state.info["command"], joint_vel, jp.zeros(12), self._stand_still_command_threshold
+            # ),
             "abduction_angle": rewards.reward_abduction_angle(
                 joint_angles,
                 desired_abduction_angles=self._desired_abduction_angles,
             ),
-            "feet_air_time": rewards.reward_feet_air_time(
-                state.info["feet_air_time"],
-                first_contact,
-                state.info["command"],
-            ),
+            # "feet_air_time": rewards.reward_feet_air_time(
+            #     state.info["feet_air_time"],
+            #     first_contact,
+            #     state.info["command"],
+            # ),
             "foot_slip": rewards.reward_foot_slip(
                 pipeline_state,
                 contact_filt_cm,

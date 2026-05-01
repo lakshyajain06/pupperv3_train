@@ -75,6 +75,53 @@ def reward_tracking_ang_vel(
     ang_vel_error = jp.square(commands[2] - base_ang_vel[2])
     return jp.clip(jp.exp(-ang_vel_error / (tracking_sigma + EPS)), -1000.0, 1000.0)
 
+def reward_tracking_foot_lin_pos(
+    commands: jax.Array,
+    target_world_pos: jax.Array,
+    left_foot_pos: jax.Array,
+    right_foot_pos: jax.Array,
+    tracking_sigma: float,
+) -> jax.Array:
+    """
+    Rewards the robot based on the distance between the reaching foot 
+    and the target world pose.
+    """
+    # 1. Identify which leg is supposed to be moving
+    # 1 is Left, 0 is Right
+    leg_idx = commands[3].astype(jp.int32) 
+
+    # 2. Select the reaching foot's current position using jp.where
+    reaching_foot_pos = jp.where(leg_idx == 1, left_foot_pos, right_foot_pos)
+
+    # 3. Calculate Euclidean distance to the pre-computed world target
+    distance = jp.linalg.norm(reaching_foot_pos - target_world_pos)
+
+    # 4. Standard Gaussian reward
+    return jp.exp(-jp.square(distance) / jp.square(tracking_sigma))
+
+def reward_stand(self, commands, pipeline_state):
+    # Use jp.int32 for JAX-compatible indexing
+    selected_leg_idx = commands[3].astype(jp.int32) 
+    
+    # 1. Get contact forces for all 4 feet at once
+    # Result: a 4-element array of booleans
+    contact_forces = pipeline_state.contact.force[self._feet_site_id] 
+    is_contact = contact_forces > 0.1
+    
+    # 2. Create a "Moving Mask" (e.g., [0, 1, 0, 0] if leg 1 is selected)
+    # jp.arange(4) generates [0, 1, 2, 3]
+    moving_mask = (jp.arange(4) == selected_leg_idx)
+    
+    # 3. Calculate rewards for all legs simultaneously
+    # If moving leg is in contact: -2.0. If stance leg is in contact: +0.5.
+    rewards = jp.where(
+        moving_mask, 
+        -2.0 * is_contact,   # Penalty for the manipulator leg
+        0.5 * is_contact     # Reward for the three stance legs
+    )
+    
+    # 4. Sum them up into a single float
+    return jp.sum(rewards)
 
 def reward_feet_air_time(
     air_time: jax.Array,
