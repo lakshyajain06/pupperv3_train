@@ -18,9 +18,10 @@ def get_config():
                         # Tracking rewards are computed using exp(-delta^2/sigma)
                         # sigma can be a hyperparameters to tune.
                         # Track the base x-y velocity (no z-velocity tracking.)
-                        tracking_lin_vel=0.0,
+                        anchor_pose_drift=0.0,
+                        tracking_foot_lin_pos=0.0,
                         # Track the angular velocity along z-axis, i.e. yaw rate.
-                        tracking_ang_vel=0.0,
+                        stand=0.0,
                         # Below are regularization terms, we roughly divide the
                         # terms to base state regularizations, joint
                         # regularizations, and other behavior regularizations.
