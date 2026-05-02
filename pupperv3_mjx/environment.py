@@ -122,6 +122,8 @@ class PupperV3Env(PipelineEnv):
         imu_latency_distribution: jax.Array = jp.array([0.5, 0.5]),  # TODO: Measure on pupper
         desired_world_z_in_body_frame: jax.Array = jp.array([0.0, 0.0, 1.0]),
         use_imu: bool = True,
+        bounding_box = [(0.05, 0.2), (0.05, 0.25), (-0.05, 0.075)],
+        two_leg = False
     ):
         """
         Args:
@@ -258,6 +260,9 @@ class PupperV3Env(PipelineEnv):
         # whether to use imu
         self._use_imu = use_imu
 
+        self.bounding_box = bounding_box
+        self.two_leg = two_leg
+
     def sample_command_body(self, rng: jax.Array) -> jax.Array:
         """
         Sample random command with desired linear and angular velocity ranges.
@@ -289,16 +294,16 @@ class PupperV3Env(PipelineEnv):
         return new_cmd
     
     def sample_command_foot(self, rng: jax.Array):
-        rng, k_x, k_y, k_z, k_vec, k_foot = jax.random.split(rng, 6)
+        rng, k_x, k_y, k_z, k_foot = jax.random.split(rng, 5)
 
         # get which foot
-        foot_idx = jax.random.bernoulli(k_foot, p=0.5).astype(jp.float32)
+        foot_idx = jp.where(self.two_leg, jax.random.bernoulli(k_foot, p=0.5).astype(jp.float32), 1.0)
 
         # define bounding box for target coordinates
-        foot_y_abs_range = (0.05, 0.25) # this is absolute because it is + or - depending on which foot
+        foot_y_abs_range = self.bounding_box[1] # this is absolute because it is + or - depending on which foot
 
-        foot_x_range = (0.05, 0.2)
-        foot_z_range = (-0.05, 0.075)
+        foot_x_range = self.bounding_box[0]
+        foot_z_range = self.bounding_box[2]
 
         # sample y pos and flip based on foot
         abs_y = jax.random.uniform(k_y, (1,), minval=foot_y_abs_range[0], maxval=foot_y_abs_range[1])

@@ -8,6 +8,8 @@ import mediapy as media
 import os
 import wandb
 import jax
+from brax import math
+
 from jax import numpy as jp
 
 from flax.training import orbax_utils
@@ -250,6 +252,16 @@ def visualize_policy(
     # initialize the state
     rng = jax.random.PRNGKey(0)
     state = jit_reset(rng)
+
+    desired_yaw_deg = 90.0  # Change this to whatever angle you want
+    yaw_rad = desired_yaw_deg * jp.pi / 180.0
+
+    new_quat = math.euler_to_quat(jp.array([0.0, 0.0, yaw_rad]))
+    new_q = state.pipeline_state.q.at[3:7].set(new_quat)
+
+    new_pipeline_state = state.pipeline_state.replace(q=new_q)
+    state = state.replace(pipeline_state=new_pipeline_state)
+
     state.info["command"] = command_seq[0]
     rollout = [state.pipeline_state]
 
