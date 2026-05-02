@@ -122,7 +122,7 @@ class PupperV3Env(PipelineEnv):
         imu_latency_distribution: jax.Array = jp.array([0.5, 0.5]),  # TODO: Measure on pupper
         desired_world_z_in_body_frame: jax.Array = jp.array([0.0, 0.0, 1.0]),
         use_imu: bool = True,
-        bounding_box = [(0.05, 0.2), (0.05, 0.25), (-0.05, 0.075)],
+        bounding_box = [(-0.05, 0.15), (0.15, 0.3), (-0.05, 0.1)],
         two_leg = False
     ):
         """
