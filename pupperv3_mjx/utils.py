@@ -253,7 +253,7 @@ def visualize_policy(
     rng = jax.random.PRNGKey(0)
     state = jit_reset(rng)
 
-    desired_yaw_deg = 90.0  # Change this to whatever angle you want
+    desired_yaw_deg = -90.0  # Change this to whatever angle you want
     yaw_rad = desired_yaw_deg * jp.pi / 180.0
 
     new_quat = math.euler_to_quat(jp.array([0.0, 0.0, yaw_rad]))
