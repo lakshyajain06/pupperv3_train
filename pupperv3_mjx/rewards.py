@@ -15,6 +15,34 @@ def reward_ang_vel_xy(xd: Motion) -> jax.Array:
     # Penalize xy axes base angular velocity
     return jp.clip(jp.sum(jp.square(xd.ang[0, :2])), -1000.0, 1000.0)
 
+def reward_anchor_pose_drift(
+    command: jax.Array,
+    joint_angles: jax.Array, 
+    default_pose: jax.Array,
+) -> jax.Array:
+    """
+    Penalizes deviation from the default pose ONLY for legs 
+    that are NOT currently being commanded.
+    """
+    # command[3] is the foot_idx (0, 1, 2, or 3)
+    active_foot_idx = command[3].astype(jp.int32)
+    
+    # Calculate squared error for all 12 joints
+    #
+    errors = jp.square(joint_angles - default_pose)
+    
+    # Reshape errors to (4 legs, 3 joints per leg) to make masking easy
+    errors_per_leg = errors.reshape(4, 3)
+    
+    # Create a mask: 1.0 for inactive legs, 0.0 for the active leg
+    # We use jp.arange(4) to compare against the active_foot_idx
+    mask = (jp.arange(4) != active_foot_idx).astype(jp.float32)
+    
+    # Apply mask (broadcasting the 4-element mask across the 3 joints per leg)
+    # This zeros out the penalty for the leg that is supposed to move
+    masked_errors = errors_per_leg * mask[:, None]
+    
+    return -jp.sum(masked_errors)
 
 def reward_tracking_orientation(
     desired_world_z_in_body_frame: jax.Array, x: Transform, tracking_sigma: float

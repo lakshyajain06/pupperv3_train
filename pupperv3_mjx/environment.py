@@ -490,6 +490,11 @@ class PupperV3Env(PipelineEnv):
             #     xd,
             #     tracking_sigma=self._reward_config.rewards.tracking_sigma,
             # ),
+            "anchor_pose_drift": rewards.reward_anchor_pose_drift(
+                command=state.info["command"],
+                joint_angles=pipeline_state.q[7:],
+                default_pose=self._default_pose
+            ),
             "tracking_foot_lin_pos": rewards.reward_tracking_foot_lin_pos(
                 state.info["command"],
                 target_world_pos,
