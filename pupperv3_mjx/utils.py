@@ -215,6 +215,7 @@ def visualize_policy(
     vx: float = 0.5,
     vy: float = 0.4,
     wz: float = 1.5,
+    wandb_log=True
 ):
     """
     Visualize a policy by creating a video of the robot's behavior.
@@ -288,15 +289,18 @@ def visualize_policy(
         eval_env.render(rollout[::render_every], camera="tracking_cam"),
         fps=fps,
     )
-    wandb.log(
-        {
-            "eval/video/command/vx": vx,
-            "eval/video/command/vy": vy,
-            "eval/video/command/wz": wz,
-            "eval/video": wandb.Video(filename, format="mp4"),
-        },
-        step=current_step,
-    )
+    if wandb_log:
+        wandb.log(
+            {
+                "eval/video/command/vx": vx,
+                "eval/video/command/vy": vy,
+                "eval/video/command/wz": wz,
+                "eval/video": wandb.Video(filename, format="mp4"),
+            },
+            step=current_step,
+        )
+    else:
+        media.show_video(eval_env.render(rollout[::render_every], camera="tracking_cam"), fps=fps)
 
 
 def activation_fn_map(activation_name: str):
