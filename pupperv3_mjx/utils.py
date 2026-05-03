@@ -215,7 +215,8 @@ def visualize_policy(
     vx: float = 0.5,
     vy: float = 0.4,
     wz: float = 1.5,
-    wandb_log=True
+    wandb_log=True,
+    yaw=-90
 ):
     """
     Visualize a policy by creating a video of the robot's behavior.
@@ -254,8 +255,8 @@ def visualize_policy(
     rng = jax.random.PRNGKey(0)
     state = jit_reset(rng)
 
-    desired_yaw_deg = -90.0  # Change this to whatever angle you want
-    yaw_rad = desired_yaw_deg * jp.pi / 180.0
+    # desired_yaw_deg = -90.0  # Change this to whatever angle you want
+    yaw_rad = yaw * jp.pi / 180.0
 
     new_quat = math.euler_to_quat(jp.array([0.0, 0.0, yaw_rad]))
     new_q = state.pipeline_state.q.at[3:7].set(new_quat)
@@ -284,12 +285,13 @@ def visualize_policy(
 
     filename = os.path.join(output_folder, f"step_{current_step}_policy.mp4")
     fps = int(1.0 / eval_env.dt / render_every)
-    media.write_video(
-        filename,
-        eval_env.render(rollout[::render_every], camera="tracking_cam"),
-        fps=fps,
-    )
+    
     if wandb_log:
+        media.write_video(
+            filename,
+            eval_env.render(rollout[::render_every], camera="tracking_cam"),
+            fps=fps,
+        )
         wandb.log(
             {
                 "eval/video/command/vx": vx,
