@@ -448,7 +448,7 @@ class PupperV3Env(PipelineEnv):
         torso_quat = pipeline_state.x.rot[0]
         anchor_pos_world = pipeline_state.site_xpos[actual_site_id]
 
-        # calculate world position of target
+        # calculate world position of target for reward calculation
         target_world_pos = anchor_pos_world + math.rotate(target_local_xyz, torso_quat)
 
         # Actual world position of the reaching foot
@@ -460,7 +460,6 @@ class PupperV3Env(PipelineEnv):
 
         # Calculate axis-specific error in the body-aligned frame
         error_world = target_world_pos - actual_foot_pos_world
-        error_body = math.rotate(error_world, math.quat_inv(torso_quat))
 
        
         # new_q = pipeline_state.q
@@ -620,6 +619,21 @@ class PupperV3Env(PipelineEnv):
         # Log total displacement as a proxy metric
         state.metrics["total_dist"] = math.normalize(x.pos[self._torso_idx - 1])[1]
 
+        # Calculate tracking metrics AFTER the physics step and AFTER command resampling
+        # This ensures we are measuring against the target the robot is actually seeing
+        target_local_xyz = state.info["command"][:3]
+        leg_idx = state.info["command"][3].astype(jp.int32)
+        anchor_idx = 1 - leg_idx
+        anchor_pos_world = pipeline_state.site_xpos[self._feet_site_id[anchor_idx]]
+        current_torso_quat = pipeline_state.x.rot[self._torso_idx - 1]
+        
+        target_world_pos = anchor_pos_world + math.rotate(target_local_xyz, current_torso_quat)
+        reaching_site_id = self._feet_site_id[leg_idx]
+        actual_foot_pos_world = pipeline_state.site_xpos[reaching_site_id]
+        
+        dist_error = error_world
+        error_world = target_world_pos - actual_foot_pos_world
+        
         # Calculate running average to keep units grounded in meters
         # We capture the step count before it potentially gets reset to 0
         step_count = state.info["step"].astype(jp.float32)
@@ -638,9 +652,9 @@ class PupperV3Env(PipelineEnv):
             return old_avg + (current - old_avg) / (step_count + 1e-6)
 
         state.metrics["track/distance"] = update_avg(state.metrics["track/distance"], dist_error)
-        state.metrics["track/error_x"] = update_avg(state.metrics["track/error_x"], jp.abs(error_body[0]))
-        state.metrics["track/error_y"] = update_avg(state.metrics["track/error_y"], jp.abs(error_body[1]))
-        state.metrics["track/error_z"] = update_avg(state.metrics["track/error_z"], jp.abs(error_body[2]))
+        state.metrics["track/error_x"] = update_avg(state.metrics["track/error_x"], jp.abs(error_world[0]))
+        state.metrics["track/error_y"] = update_avg(state.metrics["track/error_y"], jp.abs(error_world[1]))
+        state.metrics["track/error_z"] = update_avg(state.metrics["track/error_z"], jp.abs(error_world[2]))
         state.metrics["track/success_1cm"] = update_avg(state.metrics["track/success_1cm"], (dist_error < 0.01).astype(jp.float32))
         state.metrics["track/success_2cm"] = update_avg(state.metrics["track/success_2cm"], (dist_error < 0.02).astype(jp.float32))
         
