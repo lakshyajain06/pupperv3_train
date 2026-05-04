@@ -606,20 +606,44 @@ class PupperV3Env(PipelineEnv):
             state.info["desired_world_z_in_body_frame"],
         )
 
-        # Reset the step counter when done
+        # Calculate running average to keep units grounded in meters
+        # We capture the step count before it potentially gets reset to 0
+        step_count = state.info["step"].astype(jp.float32)
+        
+        # Reset the step counter when done or at resampling interval
         state.info["step"] = jp.where(
             done | (state.info["step"] > self._resample_velocity_step),
             0,
             state.info["step"],
         )
+
         # Log total displacement as a proxy metric
         state.metrics["total_dist"] = math.normalize(x.pos[self._torso_idx - 1])[1]
-        state.metrics["track/distance"] = dist_error
-        state.metrics["track/error_x"] = jp.abs(error_body[0])
-        state.metrics["track/error_y"] = jp.abs(error_body[1])
-        state.metrics["track/error_z"] = jp.abs(error_body[2])
-        state.metrics["track/success_1cm"] = (dist_error < 0.005).astype(jp.float32)
-        state.metrics["track/success_2cm"] = (dist_error < 0.01).astype(jp.float32)
+
+        # Calculate running average to keep units grounded in meters
+        # We capture the step count before it potentially gets reset to 0
+        step_count = state.info["step"].astype(jp.float32)
+        
+        # Reset the step counter when done or at resampling interval
+        state.info["step"] = jp.where(
+            done | (state.info["step"] > self._resample_velocity_step),
+            0,
+            state.info["step"],
+        )
+
+        # Log total displacement as a proxy metric
+        state.metrics["total_dist"] = math.normalize(x.pos[self._torso_idx - 1])[1]
+
+        def update_avg(old_avg, current):
+            return old_avg + (current - old_avg) / (step_count + 1e-6)
+
+        state.metrics["track/distance"] = update_avg(state.metrics["track/distance"], dist_error)
+        state.metrics["track/error_x"] = update_avg(state.metrics["track/error_x"], jp.abs(error_body[0]))
+        state.metrics["track/error_y"] = update_avg(state.metrics["track/error_y"], jp.abs(error_body[1]))
+        state.metrics["track/error_z"] = update_avg(state.metrics["track/error_z"], jp.abs(error_body[2]))
+        state.metrics["track/success_1cm"] = update_avg(state.metrics["track/success_1cm"], (dist_error < 0.01).astype(jp.float32))
+        state.metrics["track/success_2cm"] = update_avg(state.metrics["track/success_2cm"], (dist_error < 0.02).astype(jp.float32))
+        
         state.metrics.update(state.info["rewards"])
 
 
