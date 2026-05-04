@@ -631,8 +631,8 @@ class PupperV3Env(PipelineEnv):
         reaching_site_id = self._feet_site_id[leg_idx]
         actual_foot_pos_world = pipeline_state.site_xpos[reaching_site_id]
         
-        dist_error = error_world
         error_world = target_world_pos - actual_foot_pos_world
+        dist_error = jp.linalg.norm(error_world)
         
         # Calculate running average to keep units grounded in meters
         # We capture the step count before it potentially gets reset to 0
