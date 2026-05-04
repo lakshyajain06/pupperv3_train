@@ -614,17 +614,14 @@ class PupperV3Env(PipelineEnv):
         )
         # Log total displacement as a proxy metric
         state.metrics["total_dist"] = math.normalize(x.pos[self._torso_idx - 1])[1]
+        state.metrics["track/distance"] = dist_error
+        state.metrics["track/error_x"] = jp.abs(error_body[0])
+        state.metrics["track/error_y"] = jp.abs(error_body[1])
+        state.metrics["track/error_z"] = jp.abs(error_body[2])
+        state.metrics["track/success_1cm"] = (dist_error < 0.005).astype(jp.float32)
+        state.metrics["track/success_2cm"] = (dist_error < 0.01).astype(jp.float32)
         state.metrics.update(state.info["rewards"])
 
-        # Log tracking metrics for W&B
-        state.metrics.update({
-            "track/distance": dist_error,
-            "track/error_x": jp.abs(error_body[0]),
-            "track/error_y": jp.abs(error_body[1]),
-            "track/error_z": jp.abs(error_body[2]),
-            "track/success_1cm": (dist_error < 0.005).astype(jp.float32),
-            "track/success_2cm": (dist_error < 0.01).astype(jp.float32),
-        })
 
         done = jp.float32(done)
         state = state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward, done=done)
