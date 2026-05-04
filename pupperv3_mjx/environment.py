@@ -605,30 +605,17 @@ class PupperV3Env(PipelineEnv):
             state.info["desired_world_z_in_body_frame"],
         )
 
-        # Calculate running average to keep units grounded in meters
-        # We capture the step count before it potentially gets reset to 0
-        step_count = state.info["step"].astype(jp.float32)
-        
-        # Reset the step counter when done or at resampling interval
-        state.info["step"] = jp.where(
-            done | (state.info["step"] > self._resample_velocity_step),
-            0,
-            state.info["step"],
-        )
-
-        # Log total displacement as a proxy metric
-        state.metrics["total_dist"] = math.normalize(x.pos[self._torso_idx - 1])[1]
 
         # Calculate tracking metrics AFTER the physics step and AFTER command resampling
         # This ensures we are measuring against the target the robot is actually seeing
         target_local_xyz = state.info["command"][:3]
         leg_idx = state.info["command"][3].astype(jp.int32)
         anchor_idx = 1 - leg_idx
-        anchor_pos_world = pipeline_state.site_xpos[self._feet_site_id[anchor_idx]]
+        anchor_pos_world = pipeline_state.site_xpos[feet_site_ids[anchor_idx]]
         current_torso_quat = pipeline_state.x.rot[self._torso_idx - 1]
         
         target_world_pos = anchor_pos_world + math.rotate(target_local_xyz, current_torso_quat)
-        reaching_site_id = self._feet_site_id[leg_idx]
+        reaching_site_id = feet_site_ids[leg_idx]
         actual_foot_pos_world = pipeline_state.site_xpos[reaching_site_id]
         
         error_world = target_world_pos - actual_foot_pos_world
