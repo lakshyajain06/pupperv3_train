@@ -4,21 +4,27 @@ Standalone evaluation script for PupperV3 foot-reaching policy.
 Uses native MuJoCo for simulation and rendering, with the trained JAX
 policy for action inference. No noise or latency is applied (clean eval).
 
-Usage (in Colab, right after training):
+Usage A – Colab (right after training, make_inference_fn already in memory):
 
     from pupperv3_mjx.eval_tracking import run_eval
     results = run_eval(
         model_xml_path=CONFIG.simulation.model_path,
         make_inference_fn=make_inference_fn,
         params=params,
-        bounding_box=CONFIG.training.bounding_box,
-        action_scale=CONFIG.policy.action_scale,
-        default_pose=CONFIG.training.default_pose,
-        position_control_kp=CONFIG.training.position_control_kp,
-        dof_damping=CONFIG.training.dof_damping,
-        observation_history=CONFIG.policy.observation_history,
-        physics_dt=CONFIG.simulation.physics_dt,
-        env_dt=CONFIG.training.environment_dt,
+        ...
+    )
+
+Usage B – Mac / standalone (load from saved checkpoint):
+
+    from pupperv3_mjx.eval_tracking import load_policy_from_checkpoint, run_eval
+    make_inference_fn, params = load_policy_from_checkpoint(
+        checkpoint_dir="path/to/checkpoint_dir",
+        model_xml_path="description/pupper_v3.xml",
+    )
+    results = run_eval(
+        model_xml_path="description/pupper_v3.xml",
+        make_inference_fn=make_inference_fn,
+        params=params,
     )
 """
 
@@ -28,6 +34,62 @@ import jax
 from jax import numpy as jp
 from typing import List, Optional, Tuple
 import time
+import functools
+
+
+# ── Checkpoint loader (for standalone Mac usage) ─────────────────────────────
+
+def load_policy_from_checkpoint(
+    checkpoint_dir: str,
+    model_xml_path: str,
+    hidden_layer_sizes: Tuple = (256, 128, 128, 128),
+    activation: str = "elu",
+    env_kwargs: Optional[dict] = None,
+):
+    """Reconstruct the PPO network and load saved params from an orbax checkpoint.
+
+    Args:
+        checkpoint_dir: Path to the orbax checkpoint directory (e.g. ``output_run/40304640``).
+        model_xml_path: Path to the MuJoCo XML used for training.
+        hidden_layer_sizes: Must match the training CONFIG.
+        activation: Must match the training CONFIG.
+        env_kwargs: Extra kwargs forwarded to the environment constructor.
+
+    Returns:
+        (make_inference_fn, params) ready to pass to ``run_eval``.
+    """
+    from brax import envs
+    from brax.training.agents.ppo import networks as ppo_networks
+    from brax.io import model as brax_model
+    from pupperv3_mjx import utils as pup_utils
+
+    activation_fn = pup_utils.activation_fn_map(activation)
+
+    if env_kwargs is None:
+        env_kwargs = {}
+    env_kwargs.setdefault("path", model_xml_path)
+
+    env = envs.get_environment("PupperV3Env", **env_kwargs)
+
+    make_networks_factory = functools.partial(
+        ppo_networks.make_ppo_networks,
+        policy_hidden_layer_sizes=hidden_layer_sizes,
+        activation=activation_fn,
+    )
+
+    ppo_network = make_networks_factory(
+        observation_size=env.observation_size,
+        action_size=env.action_size,
+    )
+
+    make_inference_fn = ppo_network.make_inference_fn
+
+    from orbax import checkpoint as ocp
+    from pathlib import Path
+    orbax_checkpointer = ocp.PyTreeCheckpointer()
+    params = orbax_checkpointer.restore(str(Path(checkpoint_dir).resolve()))
+
+    return make_inference_fn, params
 
 
 # ── Quaternion helpers (numpy, matching MuJoCo/Brax [w,x,y,z] convention) ─────
@@ -336,15 +398,21 @@ def run_eval(
 
     # ── Save video ───────────────────────────────────────────────────────
     if render and frames:
+        fps = int(1.0 / env_dt)
+        results["frames"] = frames
         try:
             import mediapy as media
-            fps = int(1.0 / env_dt)
-            media.show_video(frames, fps=fps, title="Eval rollouts")
-            print(f"\nShowing video ({len(frames)} frames at {fps} fps)")
+            video_path = "eval_rollouts.mp4"
+            media.write_video(video_path, frames, fps=fps)
+            print(f"\nSaved video to {video_path} ({len(frames)} frames at {fps} fps)")
+            # Also try to display inline (works in notebooks, no-op otherwise)
+            try:
+                media.show_video(frames, fps=fps, title="Eval rollouts")
+            except Exception:
+                pass
         except Exception as e:
-            print(f"\nCould not display video: {e}")
+            print(f"\nCould not save video: {e}")
             print("Frames array is available in results['frames'].")
-        results["frames"] = frames
 
     if renderer is not None:
         renderer.close()
@@ -352,3 +420,39 @@ def run_eval(
     results["all_errors"] = all_errors
     results["commands"] = commands
     return results
+
+
+# ── CLI entry point (for running on Mac) ─────────────────────────────────────
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Evaluate PupperV3 foot-reaching policy")
+    parser.add_argument("--model_xml", type=str, required=True,
+                        help="Path to MuJoCo XML (e.g. description/pupper_v3.xml)")
+    parser.add_argument("--checkpoint", type=str, required=True,
+                        help="Path to orbax checkpoint dir (e.g. output_run/40304640)")
+    parser.add_argument("--n_episodes", type=int, default=20)
+    parser.add_argument("--steps", type=int, default=300)
+    parser.add_argument("--settle", type=int, default=100)
+    parser.add_argument("--no_render", action="store_true")
+    parser.add_argument("--render_episodes", type=int, default=3)
+    args = parser.parse_args()
+
+    print("Loading policy from checkpoint …")
+    make_inf, par = load_policy_from_checkpoint(
+        checkpoint_dir=args.checkpoint,
+        model_xml_path=args.model_xml,
+    )
+
+    run_eval(
+        model_xml_path=args.model_xml,
+        make_inference_fn=make_inf,
+        params=par,
+        n_episodes=args.n_episodes,
+        steps_per_episode=args.steps,
+        settle_steps=args.settle,
+        render=not args.no_render,
+        render_episodes=args.render_episodes,
+    )
+
